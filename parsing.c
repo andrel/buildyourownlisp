@@ -5,7 +5,11 @@
 #include <editline/readline.h>
 #include <editline/history.h>
 
-long eval_op(char* op, long x, long y) {
+long eval_op_single(char *op, long x) {
+  if (strcmp(op, "-") == 0) return x * -1;
+}
+
+long eval_op(char *op, long x, long y) {
   if (strcmp(op, "+") == 0) return x + y;
   if (strcmp(op, "-") == 0) return x - y;
   if (strcmp(op, "*") == 0) return x * y;
@@ -48,11 +52,16 @@ long eval(mpc_ast_t *t) {
   /* We store the third child in `x` */
   long x = eval(t->children[2]);
 
-  /* Iterate the remaining children and combine */
-  int i = 3;
-  while (strstr(t->children[i]->tag, "expr")) {
-    x = eval_op(op, x, eval(t->children[i]));
-    i++;
+  /* eval_op with only one argument */
+  if (t->children_num < 5) {
+    x = eval_op_single(op, x);
+  } else {
+    /* Iterate the remaining children and combine */
+    int i = 3;
+    while (strstr(t->children[i]->tag, "expr")) {
+      x = eval_op(op, x, eval(t->children[i]));
+      i++;
+    }
   }
 
   return x;
