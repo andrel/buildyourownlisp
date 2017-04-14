@@ -11,6 +11,27 @@ long eval_op(char* op, long x, long y) {
   if (strcmp(op, "*") == 0) return x * y;
   if (strcmp(op, "/") == 0) return x / y;
   if (strcmp(op, "%") == 0) return x % y;
+  if (strcmp(op, "^") == 0) {
+    long acc = y;
+    for (int i = 1; i < x; i++) {
+      acc *= y;
+    }
+    return acc;
+  }
+  if (strcmp(op, "min") == 0) {
+    if (x < y) {
+      return x;
+    } else {
+      return y;
+    }
+  }
+  if (strcmp(op, "max") == 0) {
+    if (x > y) {
+      return x;
+    } else {
+      return y;
+    }
+  }
   return 0;
 }
 
@@ -48,7 +69,7 @@ int main(int argc, char **argv) {
   mpca_lang(MPCA_LANG_DEFAULT,
     "                                                    \
       number    : /-?[0-9]+/;                            \
-      operator  :'+' | '-' | '*' | '/' | '%';            \
+      operator  : '+' | '-' | '*' | '/' | '%' | '^' | \"min\" | \"max\"; \
       expr      : <number> | '(' <operator> <expr>+ ')'; \
       lispy     : /^/ <operator> <expr>+ /$/;            \
     ",
