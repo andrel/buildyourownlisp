@@ -5,6 +5,11 @@
 #include <editline/readline.h>
 #include <editline/history.h>
 
+/*** macros ***/
+
+#define LASSERT(args, cond, err) \
+  if (!cond) { lval_free(args); return lval_err(err); }
+
 /* lval can be a number or an error */
 typedef struct lval {
   int type;
@@ -22,6 +27,8 @@ enum { LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR };
 void lval_print(lval *v);
 void lval_del(lval *v);
 lval *lval_add(lval *v, lval *x);
+lval* lval_eval(lval *v);
+lval* lval_join(lval *x, lval *y);
 
 /* Create a pointer to number type lval */
 lval* lval_num(long x) {
@@ -209,7 +216,83 @@ lval* builtin_op(lval *a, char *op) {
   return x;
 }
 
-lval* lval_eval(lval *v);
+lval* builtin_head(lval *a) {
+  LASSERT(a, a->count == 1,
+	  "Function 'head' passed too many arguments!");
+  LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+	  "Function 'head' passed incorrect types!");
+  LASSERT(a, a->cell[0]->count != 0,
+	  "Function 'head' passed {}!");
+
+  lval *v = lval_take(a, 0);
+  while (v->count > 1) { lval_free(lval_pop(v, 1)); }
+  return v;
+}
+
+lval* builtin_tail(lval *a) {
+  LASSERT(a, a->count == 1,
+	  "Function 'tail'passed too many arguments!");
+  LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+	  "Function 'tail' passed incorrect types!");
+  LASSERT(a, a->cell[0]->count != 0,
+	  "Function 'tail' passed {}!");
+
+  lval *v = lval_take(a, 0);
+  lval_free(lval_pop(v, 0));
+  return v;
+}
+
+lval* builtin_list(lval *a) {
+  a->type = LVAL_QEXPR;
+  return a;
+}
+
+lval* builtin_eval(lval *a) {
+  LASSERT(a, a->count == 1,
+	  "Function 'eval' passed too many arguments!");
+  LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+	  "Function 'eval' passed incorrect types!");
+
+  lval *x = lval_take(a, 0);
+  x->type = LVAL_SEXPR;
+  return lval_eval(x);
+}
+
+lval* builtin_join(lval *a) {
+
+  for (int i = 0; i < a->count; i++) {
+    LASSERT(a, a->cell[i]->type == LVAL_QEXPR,
+	    "Function 'join' passed incorrect type!");
+  }
+
+  lval *x = lval_pop(a, 0);
+  while (a->count) {
+    x = lval_join(x, lval_pop(a, 0));
+  }
+
+  lval_free(a);
+  return x;
+}
+
+lval* builtin(lval *a, char* func) {
+  if (strcmp("list", func) == 0) return builtin_list(a);
+  if (strcmp("head", func) == 0) return builtin_head(a);
+  if (strcmp("tail", func) == 0) return builtin_tail(a);
+  if (strcmp("join", func) == 0) return builtin_join(a);
+  if (strcmp("eval", func) == 0) return builtin_eval(a);
+  if (strstr("+-/*", func)) return builtin_op(a, func);
+  lval_free(a);
+  return lval_err("Unknown function");
+}
+lval* lval_join(lval *x, lval *y) {
+  /* FOr each cell i 'y', add it to 'x' */
+  while (y->count) {
+    x = lval_add(x, lval_pop(y, 0));
+  }
+
+  lval_free(y);
+  return x;
+}
 
 lval* lval_eval_sexpr(lval *v) {
 
@@ -232,7 +315,7 @@ lval* lval_eval_sexpr(lval *v) {
     return lval_err("S-expression does not start with symbol.");
   }
 
-  lval *result = builtin_op(v, f->sym);
+  lval *result = builtin(v, f->sym);
   lval_free(f);
   return result;
 }
@@ -254,7 +337,8 @@ int main() {
   mpca_lang(MPCA_LANG_DEFAULT,
     "                                                    \
       number : /-?[0-9]+/;                               \
-      symbol : '+' | '-' | '*' | '/' ;                   \
+      symbol : \"list\" | \"head\" | \"tail\"            \
+             | \"join\" | \"eval\" | '+' | '-' | '*' | '/' ; \
       sexpr  : '(' <expr>* ')' ;                         \
       qexpr  : '{' <expr>* '}' ;                         \
       expr   : <number> | <symbol> | <sexpr> | <qexpr> ; \
