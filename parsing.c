@@ -312,6 +312,29 @@ lval* builtin_div(lenv *e, lval *a) {
   return builtin_op(e, a, "/");
 }
 
+// Define function
+lval* builtin_def(lenv *e, lval *a) {
+  LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+          "Function 'def' passed incorrect type");
+  lval *syms = a->cell[0];
+
+  // Ensure all elements of first list are symbols
+  for (int i = 0; i < syms->count; i++)
+    LASSERT(a, syms->cell[i]->type == LVAL_SYM,
+            "Function 'def' cannot define non-symbol");
+
+  // Check correct number of symbol of values
+  LASSERT(a, syms->count == a->count - 1,
+          "Function 'def' cannot define incorrect number of values to symbols");
+
+  // Assign copies of values to symbols
+  for (int i = 0; i < syms->count; i++)
+    lenv_put(e, syms->cell[i], a->cell[i + 1]);
+
+  lval_free(a);
+  return lval_sexpr();
+}
+
 lval* builtin_head(lenv *e, lval *a) {
   LASSERT(a, a->count == 1,
 	  "Function 'head' passed too many arguments!");
@@ -484,6 +507,9 @@ void lenv_add_builtins(lenv *e) {
   lenv_add_builtin(e, "-", builtin_sub);
   lenv_add_builtin(e, "*", builtin_mul);
   lenv_add_builtin(e, "/", builtin_div);
+
+  /* Variable Functions */
+  lenv_add_builtin(e, "def", builtin_def);
 }
 
 int main() {
