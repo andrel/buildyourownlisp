@@ -67,14 +67,15 @@ struct lenv {
 
 /*** method declarations ***/
 void lval_print(lval *v);
-void lval_del(lval *v);
+void lval_free(lval *v);
 void lval_free(lval *v);
 lval *lval_add(lval *v, lval *x);
 lval *lval_eval(lenv *e, lval *v);
 lval *lval_join(lval *x, lval *y);
 lval *lval_copy(lval *v);
 lenv *lenv_new(void);
-lval* builtin_eval(lenv *e, lval *a);
+lval *builtin_eval(lenv *e, lval *a);
+lval *builtin_list(lenv *e, lval *a);
 
 /* Create a pointer to number type lval */
 lval* lval_num(long x) {
@@ -353,6 +354,24 @@ lval* lval_call(lenv *e, lval *f, lval *a) {
                       total);
     }
     lval *sym = lval_pop(f->formals, 0);
+
+    // Special case to deal with &
+    if (strcmp(sym->sym, "&") == 0) {
+
+      // Ensure '&' is folowed by another symbol.
+      if (f->formals->count != 1) {
+        lval_free(a);
+        return lval_err("Function invalid. One or more symbol(s) must follow '&'");
+      }
+
+      // Next formal should be bound to remaining arguments.
+      lval *nsym = lval_pop(f->formals, 0);
+      lenv_put(f->env, nsym, builtin_list(e, a));
+      lval_free(sym);
+      lval_free(nsym);
+      break;
+    }
+
     lval *val = lval_pop(a, 0);
     lenv_put(f->env, sym, val);
     lval_free(sym);
@@ -360,6 +379,28 @@ lval* lval_call(lenv *e, lval *f, lval *a) {
   }
 
   lval_free(a);
+
+  // If '&' remains in formal list bind to empty list
+  if (f->formals->count > 0 && strcmp(f->formals->cell[0]->sym, "&") == 0) {
+
+    // Check that "&" is not passed invalidly
+    if (f->formals->count != 2) {
+      return lval_err("Function format invalid. Symbol '&' is not folowed by single symbol.");
+    }
+
+    // Pop and delete '&' symbol
+    lval_free(lval_pop(f->formals, 0));
+
+    // Pop next symbol and create empty list
+    lval *sym = lval_pop(f->formals, 0);
+    lval *val = lval_qexpr();
+
+    // Bind to environment and delete
+    lenv_put(f->env, sym, val);
+    lval_free(sym);
+    lval_free(val);
+  }
+
 
   // If all formals are defined, evaluate.
   if (f->formals->count == 0) {
