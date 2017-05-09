@@ -571,6 +571,45 @@ lval* builtin_join(__attribute__ ((unused)) lenv *e, lval *a) {
   return x;
 }
 
+lval *builtin_ord(__attribute__ ((unused)) lenv *e, lval *a, char *op) {
+  LASSERT_NUM(op, a, 2);
+  LASSERT_TYPE(op, a, 0, LVAL_NUM);
+  LASSERT_TYPE(op, a, 1, LVAL_NUM);
+
+  int r;
+  if (strcmp(op, ">") == 0) {
+    r = (a->cell[0]->num > a->cell[1]->num);
+  }
+  if (strcmp(op, "<") == 0) {
+    r = (a->cell[0]->num < a->cell[1]->num);
+  }
+  if (strcmp(op, ">=") == 0) {
+    r = (a->cell[0]->num >= a->cell[1]->num);
+  }
+  if (strcmp(op, "<=") == 0) {
+    r = (a->cell[0]->num <= a->cell[1]->num);
+  }
+
+  lval_free(a);
+  return lval_num(r);
+}
+
+lval* builtin_gt(lenv *e, lval *a) {
+  return builtin_ord(e, a, ">");
+}
+
+lval* builtin_lt(lenv *e, lval *a) {
+  return builtin_ord(e, a, "<");
+}
+
+lval* builtin_ge(lenv *e, lval *a) {
+  return builtin_ord(e, a, ">=");
+}
+
+lval* builtin_le(lenv *e, lval *a) {
+  return builtin_ord(e, a, "<=");
+}
+
 lval* builtin(lenv *e, lval *a, char* func) {
   if (strcmp("list", func) == 0) return builtin_list(e, a);
   if (strcmp("head", func) == 0) return builtin_head(e, a);
@@ -736,6 +775,12 @@ void lenv_add_builtins(lenv *e) {
   lenv_add_builtin(e, "\\", builtin_lambda);
   lenv_add_builtin(e, "def", builtin_def);
   lenv_add_builtin(e, "=", builtin_put);
+
+  /* Comparison Functions */
+  lenv_add_builtin(e, ">", builtin_gt);
+  lenv_add_builtin(e, "<", builtin_lt);
+  lenv_add_builtin(e, ">=", builtin_ge);
+  lenv_add_builtin(e, "<=", builtin_le);
 }
 
 int main() {
