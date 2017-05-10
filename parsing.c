@@ -34,6 +34,16 @@ struct lenv;
 typedef struct lval lval;
 typedef struct lenv lenv;
 
+// Parser pointers
+mpc_parser_t *Number;
+mpc_parser_t *Symbol;
+mpc_parser_t *String;
+mpc_parser_t *Comment;
+mpc_parser_t *Sexpr;
+mpc_parser_t *Qexpr;
+mpc_parser_t *Expr;
+mpc_parser_t *Lispy;
+
 enum { LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_STR,
        LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR };
 
@@ -307,6 +317,7 @@ lval* lval_read(mpc_ast_t *t) {
     if (strcmp(t->children[i]->contents, ")") == 0) continue;
     if (strcmp(t->children[i]->contents, "{") == 0) continue;
     if (strcmp(t->children[i]->contents, "}") == 0) continue;
+    if (strstr(t->children[i]->tag, "comment")) continue;
     if (strcmp(t->children[i]->tag, "regex") == 0) continue;
     x = lval_add(x, lval_read(t->children[i]));
   }
@@ -491,6 +502,42 @@ lval* builtin_op(__attribute__ ((unused)) lenv *e, lval *a, char *op) {
   }
   lval_free(a);
   return x;
+}
+
+lval *builtin_load(lenv *e, lval *a) {
+  LASSERT_NUM("load", a, 1);
+  LASSERT_TYPE("load", a, 0, LVAL_STR);
+
+  mpc_result_t r;
+  if (mpc_parse_contents(a->cell[0]->str, Lispy, &r)) {
+      // Read contents
+      lval *expr = lval_read(r.output);
+      mpc_ast_delete(r.output);
+
+      // Evaluate each expression
+      while (expr->count) {
+        lval *x = lval_eval(e, lval_pop(expr, 0));
+        if (x->type == LVAL_ERR) { lval_println(x); }
+        lval_free(x);
+      }
+
+      lval_free(expr);
+      lval_free(a);
+
+      return lval_sexpr();
+    } else {
+
+      // Get parse error
+      char *err_msg = mpc_err_string(r.error);
+      mpc_err_delete(r.error);
+
+      // Use parse error to create new error message
+      lval *err = lval_err("Could not load library %s", err_msg);
+      free(err_msg);
+      lval_free(a);
+
+      return err;
+    }
 }
 
 lval* builtin_add(lenv *e, lval *a) {
@@ -890,58 +937,69 @@ void lenv_add_builtins(lenv *e) {
   lenv_add_builtin(e, "<=", builtin_le);
 }
 
-int main() {
+int main(int argc, char **argv) {
 
-  mpc_parser_t *String = mpc_new("string");
-  mpc_parser_t *Number = mpc_new("number");
-  mpc_parser_t *Symbol = mpc_new("symbol");
-  mpc_parser_t *Sexpr = mpc_new("sexpr");
-  mpc_parser_t *Qexpr = mpc_new("qexpr");
-  mpc_parser_t *Expr = mpc_new("expr");
-  mpc_parser_t *Lispy = mpc_new("lispy");
+  String = mpc_new("string");
+  Comment = mpc_new("comment");
+  Number = mpc_new("number");
+  Symbol = mpc_new("symbol");
+  Sexpr = mpc_new("sexpr");
+  Qexpr = mpc_new("qexpr");
+  Expr = mpc_new("expr");
+  Lispy = mpc_new("lispy");
 
   mpca_lang(MPCA_LANG_DEFAULT,
     "                                                    \
       string : /\"(\\\\.|[^\"])*\"/ ;                    \
+      comment: /;[^\\r\\n]*/ ;                           \
       number : /-?[0-9]+/;                               \
       symbol : /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&]+/ ;        \
       sexpr  : '(' <expr>* ')' ;                         \
       qexpr  : '{' <expr>* '}' ;                         \
-      expr   : <string> | <number> | <symbol> | <sexpr> | <qexpr> ; \
+      expr   : <string> | <comment> | <number> | <symbol> | <sexpr> | <qexpr> ; \
       lispy  : /^/ <expr>* /$/;                          \
     ",
-    String, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
+    String, Comment, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
 
   puts("Lispy version 0.0.0.0.2");
   puts("Press Ctrl-C to exit\n");
 
   lenv *e = lenv_new();
   lenv_add_builtins(e);
-  
-  while (1) {
 
-    char *input = readline("lispy> ");
-    add_history(input);
-
-    mpc_result_t r;
-    if (mpc_parse("<stdin>", input, Lispy, &r)) {
-      lval *x = lval_eval(e, lval_read(r.output));
-      lval_println(x);
+  if (argc >= 2) {
+    for (int i = 1; i < argc; i++) {
+      lval *args = lval_add(lval_sexpr(), lval_str(argv[i]));
+      lval *x = builtin_load(e, args);
+      if (x->type == LVAL_ERR) { lval_println(x); }
       lval_free(x);
-      mpc_ast_delete(r.output);
-    } else {
-      /* Otherwise print and delete the error */
-      mpc_err_print(r.error);
-      mpc_err_delete(r.error);
     }
+  } else {
+    while (1) {
 
-    free(input);
+      char *input = readline("lispy> ");
+      add_history(input);
+
+      mpc_result_t r;
+      if (mpc_parse("<stdin>", input, Lispy, &r)) {
+        lval *x = lval_eval(e, lval_read(r.output));
+        lval_println(x);
+        lval_free(x);
+        mpc_ast_delete(r.output);
+      } else {
+        /* Otherwise print and delete the error */
+        mpc_err_print(r.error);
+        mpc_err_delete(r.error);
+      }
+
+      free(input);
+    }
   }
 
   lenv_free(e);
 
   /* Undefine and delete our parsers */
-  mpc_cleanup(7, String, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
+  mpc_cleanup(8, String, Comment, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
 
   return 0;
 }
