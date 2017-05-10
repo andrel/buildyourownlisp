@@ -663,6 +663,27 @@ lval *builtin_ne(lenv *e, lval *a) {
   return builtin_cmp(e, a, "!=");
 }
 
+lval *builtin_if(lenv *e, lval *a) {
+  LASSERT_NUM("if", a, 3);
+  LASSERT_TYPE("if", a, 0, LVAL_NUM);
+  LASSERT_TYPE("if", a, 1, LVAL_QEXPR);
+  LASSERT_TYPE("if", a, 2, LVAL_QEXPR);
+
+  lval *x;
+  a->cell[1]->type = LVAL_SEXPR;
+  a->cell[2]->type = LVAL_SEXPR;
+
+  if (a->cell[0]->num) {
+    x = lval_eval(e, lval_pop(a, 1));
+  } else {
+    x = lval_eval(e, lval_pop(a, 2));
+  }
+
+  // Delete argument list
+  lval_free(a);
+  return x;
+}
+
 lval* builtin(lenv *e, lval *a, char* func) {
   if (strcmp("list", func) == 0) return builtin_list(e, a);
   if (strcmp("head", func) == 0) return builtin_head(e, a);
@@ -830,6 +851,7 @@ void lenv_add_builtins(lenv *e) {
   lenv_add_builtin(e, "=", builtin_put);
 
   /* Comparison Functions */
+  lenv_add_builtin(e, "if", builtin_if);
   lenv_add_builtin(e, "==", builtin_eq);
   lenv_add_builtin(e, "!=", builtin_ne);
   lenv_add_builtin(e, ">", builtin_gt);
