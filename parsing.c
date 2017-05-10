@@ -949,6 +949,7 @@ void lenv_add_builtins(lenv *e) {
 
   /* String functions */
   lenv_add_builtin(e, "print", builtin_print);
+  lenv_add_builtin(e, "load", builtin_load);
 }
 
 int main(int argc, char **argv) {
