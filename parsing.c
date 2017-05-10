@@ -504,6 +504,17 @@ lval* builtin_op(__attribute__ ((unused)) lenv *e, lval *a, char *op) {
   return x;
 }
 
+lval *builtin_print(__attribute__ ((unused)) lenv *e, lval *a) {
+  for (int i = 0; i < a->count; i++) {
+    lval_print(a->cell[i]);
+    putchar(' ');
+  }
+
+  putchar('\n');
+  lval_free(a);
+  return lval_sexpr();
+}
+
 lval *builtin_load(lenv *e, lval *a) {
   LASSERT_NUM("load", a, 1);
   LASSERT_TYPE("load", a, 0, LVAL_STR);
@@ -935,6 +946,9 @@ void lenv_add_builtins(lenv *e) {
   lenv_add_builtin(e, "<", builtin_lt);
   lenv_add_builtin(e, ">=", builtin_ge);
   lenv_add_builtin(e, "<=", builtin_le);
+
+  /* String functions */
+  lenv_add_builtin(e, "print", builtin_print);
 }
 
 int main(int argc, char **argv) {
